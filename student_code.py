@@ -20,14 +20,21 @@ WIDTH, HEIGHT = 1080, 720
 PORT = 6666
 # server host (default localhost 127.0.0.1)
 HOST = '127.0.0.1'
+
+client = Client()
+connected = False
+while not connected:
+    try:
+        client.start_connection(HOST, PORT)
+        connected = True
+    except ConnectionRefusedError:
+        print("TURN ON THE SERVER")
+
 pygame.init()
 
 screen = display.set_mode((WIDTH, HEIGHT), depth=32, flags=RESIZABLE)
 clock = pygame.time.Clock()
 pygame.font.init()
-
-client = Client()
-client.start_connection(HOST, PORT)
 
 pokemons = client.get_pokemons()
 pokemons_obj = json.loads(pokemons, object_hook=lambda d: SimpleNamespace(**d))
@@ -80,9 +87,9 @@ def my_scale(data, x=False, y=False):
 radius = 15
 
 client.add_agent("{\"id\":0}")
-# client.add_agent("{\"id\":1}")
-# client.add_agent("{\"id\":2}")
-# client.add_agent("{\"id\":3}")
+client.add_agent("{\"id\":1}")
+client.add_agent("{\"id\":2}")
+client.add_agent("{\"id\":3}")
 
 # this commnad starts the server - the game is running now
 client.start()
@@ -185,7 +192,8 @@ while client.is_running() == 'true':
     clock.tick(60)
 
     # find the closest edge to each pokemon:
-    closest = []
+    closest = {}
+    i = 0
     for p in pokemons:
         min_dist = float("inf")
         closest_edge = None
@@ -197,41 +205,44 @@ while client.is_running() == 'true':
             if dist < min_dist:
                 min_dist = dist
                 closest_edge = e
-        closest.append((p, closest_edge))
+        closest[i] = (p, closest_edge)
+        i += 1
 
         # choose next edge
         for agent in agents:
-            min_dist = float("inf")
-            next_node = None
-            for x in closest:
-                if x[0].type > 0:
-                    if x[1].n_src.id < x[1].n_dest.id:
-                        dist, path = algo.shortest_path(agent.src, x[1].n_src.id)
-                        dist += x[1].w
-                        path.append(x[1].n_dest.id)
-                    else:
-                        dist, path = algo.shortest_path(agent.src, x[1].n_dest.id)
-                        dist += x[1].w
-                        path.append(x[1].n_src.id)
-                else:
-                    if x[1].n_src.id < x[1].n_dest.id:
-                        dist, path = algo.shortest_path(agent.src, x[1].n_dest.id)
-                        dist += x[1].w
-                        path.append(x[1].n_src.id)
-                    else:
-                        dist, path = algo.shortest_path(agent.src, x[1].n_src.id)
-                        dist += x[1].w
-                        path.append(x[1].n_dest.id)
-                if dist < min_dist:
-                    min_dist = dist
-                    next_node = path[1]
 
             if agent.dest == -1:
-                print("Next node: ", next_node)
+                next_node = agent.src
+                if len(closest) > 0:
+                    min_dist = float("inf")
+                    for i, x in closest.items():
+                        if x[0].type > 0:
+                            if x[1].n_src.id < x[1].n_dest.id:
+                                dist, path = algo.shortest_path(agent.src, x[1].n_src.id)
+                                dist += x[1].w
+                                path.append(x[1].n_dest.id)
+                            else:
+                                dist, path = algo.shortest_path(agent.src, x[1].n_dest.id)
+                                dist += x[1].w
+                                path.append(x[1].n_src.id)
+                        else:
+                            if x[1].n_src.id < x[1].n_dest.id:
+                                dist, path = algo.shortest_path(agent.src, x[1].n_dest.id)
+                                dist += x[1].w
+                                path.append(x[1].n_src.id)
+                            else:
+                                dist, path = algo.shortest_path(agent.src, x[1].n_src.id)
+                                dist += x[1].w
+                                path.append(x[1].n_dest.id)
+                        if dist < min_dist:
+                            min_dist = dist
+                            next_node = path[1]
+                    closest.pop(i)
+
                 client.choose_next_edge(
                     '{"agent_id":' + str(agent.id) + ', "next_node_id":' + str(next_node) + '}')
                 ttl = client.time_to_end()
-                # print(ttl, client.get_info())
+                print(ttl, client.get_info())
 
     client.move()
 # game over:
