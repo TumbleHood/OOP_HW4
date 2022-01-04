@@ -16,4 +16,9 @@ however, when more than 1 agent is added, things get complicated, since the prev
 
 Method 2:\
 for each pokemon, we calculate the "time" it takes to each agent to get to him from their current position. the "time" will be calculate by diving the distance from the pokemon by the agent's speed.\
-after that, we decide which agent goes to which pokemon by lookin at who will arrive first.
+after that, we decide which agent goes to which pokemon by lookin at who will arrive first.\
+
+Results:\
+this works exactly as intended;\
+each pokemon gets asserted to the agent which can catch it the fastest, taking into account that the agent will not go directly to it.\
+if an agent sees that it will not reach any pokemon faster than all other agents, it stays in place since it better hope a closer pokemon will appear.
