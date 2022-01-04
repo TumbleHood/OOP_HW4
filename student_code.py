@@ -84,6 +84,27 @@ def my_scale(data, x=False, y=False):
         return scale(data, 50, screen.get_height() - 50, min_y, max_y)
 
 
+def calc_time_path(p, close_edge, source, speed):
+    if p.type > 0:
+        if close_edge.n_src.id < close_edge.n_dest.id:
+            dist, path = algo.shortest_path(source, close_edge.n_src.id)
+            dist += close_edge.w
+            path.append(close_edge.n_dest.id)
+        else:
+            dist, path = algo.shortest_path(source, close_edge.n_dest.id)
+            dist += close_edge.w
+            path.append(close_edge.n_src.id)
+    else:
+        if close_edge.n_src.id < close_edge.n_dest.id:
+            dist, path = algo.shortest_path(source, close_edge.n_dest.id)
+            dist += close_edge.w
+            path.append(close_edge.n_src.id)
+        else:
+            dist, path = algo.shortest_path(source, close_edge.n_src.id)
+            dist += close_edge.w
+            path.append(close_edge.n_dest.id)
+    return dist/speed, path
+
 radius = 15
 
 client.add_agent("{\"id\":0}")
@@ -103,7 +124,11 @@ while client.is_running() == 'true':
     pokemons = json.loads(client.get_pokemons(),
                           object_hook=lambda d: SimpleNamespace(**d)).Pokemons
     pokemons = [p.Pokemon for p in pokemons]
+
+    i = 0
     for p in pokemons:
+        p.id = i
+        i += 1
         x, y, _ = p.pos.split(',')
         p.pos = SimpleNamespace(x=my_scale(
             float(x), x=True), y=my_scale(float(y), y=True))
@@ -193,56 +218,57 @@ while client.is_running() == 'true':
 
     # find the closest edge to each pokemon:
     closest = {}
-    i = 0
     for p in pokemons:
         min_dist = float("inf")
         closest_edge = None
         for e in graph.Edges:
             # formula to calculate a distance from a point to a line (represented by 2 other points)
-            dist = (abs((e.n_src.pos.x - e.n_dest.pos.x)*(e.n_dest.pos.y - p.real.y)
-                        - (e.n_dest.pos.x - p.real.x)*(e.n_src.pos.y - e.n_dest.pos.y)))\
+            dist = (abs((e.n_src.pos.x - e.n_dest.pos.x) * (e.n_dest.pos.y - p.real.y)
+                        - (e.n_dest.pos.x - p.real.x) * (e.n_src.pos.y - e.n_dest.pos.y))) \
                    / (sqrt((e.n_src.pos.x - e.n_dest.pos.x) ** 2 + (e.n_src.pos.y - e.n_dest.pos.y) ** 2))
             if dist < min_dist:
                 min_dist = dist
                 closest_edge = e
-        closest[i] = (p, closest_edge)
-        i += 1
+        closest[p.id] = (p, closest_edge)
 
-        # choose next edge
-        for agent in agents:
+    times = {}  # {pokemon id: {agent: [time_to_reach, next_node, speed] ...}
+    # choose next edge
+    for agent in agents:
+        if len(closest) > 0:
+            for i, x in closest.items():
+                dist, path = calc_time_path(x[0], x[1], agent.src, agent.speed)
+                if i not in times.keys():
+                    times[i] = {}
+                times[i][agent.id] = [dist, path[1:], agent.speed]
 
-            if agent.dest == -1:
-                next_node = agent.src
-                if len(closest) > 0:
-                    min_dist = float("inf")
-                    for i, x in closest.items():
-                        if x[0].type > 0:
-                            if x[1].n_src.id < x[1].n_dest.id:
-                                dist, path = algo.shortest_path(agent.src, x[1].n_src.id)
-                                dist += x[1].w
-                                path.append(x[1].n_dest.id)
-                            else:
-                                dist, path = algo.shortest_path(agent.src, x[1].n_dest.id)
-                                dist += x[1].w
-                                path.append(x[1].n_src.id)
-                        else:
-                            if x[1].n_src.id < x[1].n_dest.id:
-                                dist, path = algo.shortest_path(agent.src, x[1].n_dest.id)
-                                dist += x[1].w
-                                path.append(x[1].n_src.id)
-                            else:
-                                dist, path = algo.shortest_path(agent.src, x[1].n_src.id)
-                                dist += x[1].w
-                                path.append(x[1].n_dest.id)
-                        if dist < min_dist:
-                            min_dist = dist
-                            next_node = path[1]
-                    closest.pop(i)
+    # assert each pokemon an agent
+    next_nodes = {}
+    while times:
+        min_time = float("inf")
+        pokemon = list(times.keys())[0]
+        agent = list(list(times.values())[0].keys())[0]
+        for p, a_dic in times.items():
+            for a, v in a_dic.items():
+                if v[0] < min_time:
+                    min_time = v[0]
+                    agent = a
+                    pokemon = p
+        temp = times.pop(pokemon)
+        time_to_reach, next_node, speed = temp[agent]
+        if agent not in list(next_nodes.keys()):
+            next_nodes[agent] = next_node
+        for k, v in times.items():
+            v[agent][0] += calc_time_path(closest[pokemon][0], closest[pokemon][1], next_node[-1], speed )[0]
 
-                client.choose_next_edge(
-                    '{"agent_id":' + str(agent.id) + ', "next_node_id":' + str(next_node) + '}')
-                ttl = client.time_to_end()
-                print(ttl, client.get_info())
+    for agent in agents:
+        if agent.dest == -1:
+            if agent.id not in list(next_nodes.keys()):
+                # if the agent will not reach any pokemon faster than other agents
+                next_nodes[agent.id] = [agent.src]  # stay in place
+            client.choose_next_edge(
+                '{"agent_id":' + str(agent.id) + ', "next_node_id":' + str(next_nodes[agent.id][0]) + '}')
+            ttl = client.time_to_end()
+            print(ttl, client.get_info())
 
     client.move()
 # game over:
