@@ -13,3 +13,7 @@ we do this calculation each time the agent takes a step, in case something in th
 Results:\
 this works perfectly... with only 1 agent. the agent indeed takes the most optimal path everytime.\
 however, when more than 1 agent is added, things get complicated, since the previous method checked every agent by order and asserted it the pokemon which is closest to him, regarding the fact that there might be closer agents.\
+
+Method 2:\
+for each pokemon, we calculate the "time" it takes to each agent to get to him from their current position. the "time" will be calculate by diving the distance from the pokemon by the agent's speed.\
+after that, we decide which agent goes to which pokemon by lookin at who will arrive first.
