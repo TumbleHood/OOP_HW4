@@ -88,20 +88,20 @@ def calc_time_path(p, close_edge, source, speed):
     if p.type > 0:
         if close_edge.n_src.id < close_edge.n_dest.id:
             dist, path = algo.shortest_path(source, close_edge.n_src.id)
-            dist += close_edge.w
+            dist += close_edge.w/2  # approximately the middle of the edge
             path.append(close_edge.n_dest.id)
         else:
             dist, path = algo.shortest_path(source, close_edge.n_dest.id)
-            dist += close_edge.w
+            dist += close_edge.w/2
             path.append(close_edge.n_src.id)
     else:
         if close_edge.n_src.id < close_edge.n_dest.id:
             dist, path = algo.shortest_path(source, close_edge.n_dest.id)
-            dist += close_edge.w
+            dist += close_edge.w/2
             path.append(close_edge.n_src.id)
         else:
             dist, path = algo.shortest_path(source, close_edge.n_src.id)
-            dist += close_edge.w
+            dist += close_edge.w/2
             path.append(close_edge.n_dest.id)
     return dist/speed, path
 
@@ -224,6 +224,10 @@ try:
             rect = text.get_rect(center=(p.pos.x, p.pos.y - 2))
             screen.blit(text, rect)
 
+            text = FONT.render(str(p.value), True, Color(255, 255, 255))
+            rect = text.get_rect(center=(p.pos.x, p.pos.y - 20))
+            screen.blit(text, rect)
+
         # refresh rate
         clock.tick(60)
 
@@ -269,13 +273,17 @@ try:
             if agent not in list(next_nodes.keys()):
                 next_nodes[agent] = next_node
             for k, v in times.items():
-                v[agent][0] += calc_time_path(closest[pokemon][0], closest[pokemon][1], next_node[-1], speed )[0]
+                dist, path = calc_time_path(closest[pokemon][0], closest[pokemon][1], next_node[-1], speed)
+                v[agent][0] += dist
+                v[agent][1] += path[1:]
 
         for agent in agents:
+            if agent.id not in list(next_nodes.keys()):
+                # if the agent will not reach any pokemon faster than other agents
+                next_nodes[agent.id] = [agent.src]  # stay in place
+            screen.blit(FONT.render(str(agent.id) + " → " + str(next_nodes[agent.id][-1]), True, (255, 255, 255)),
+                        (WIDTH - 100, agent.id * 15 + 50))
             if agent.dest == -1:
-                if agent.id not in list(next_nodes.keys()):
-                    # if the agent will not reach any pokemon faster than other agents
-                    next_nodes[agent.id] = [agent.src]  # stay in place
                 client.choose_next_edge(
                     '{"agent_id":' + str(agent.id) + ', "next_node_id":' + str(next_nodes[agent.id][0]) + '}')
 
