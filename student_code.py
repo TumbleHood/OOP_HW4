@@ -12,6 +12,8 @@ import pygame
 from pygame import *
 from graph import Graph
 from graph_algorithms import GraphAlgo
+from threading import Thread
+import time
 
 # init pygame
 WIDTH, HEIGHT = 1080, 720
@@ -119,7 +121,10 @@ client.start()
 The code below should be improved significantly:
 The GUI and the "algo" are mixed - refactoring using MVC design pattern is required.
 """
+
+previous_time = -1
 moves = 0
+
 try:
     while client.is_running() == 'true':
         pokemons = json.loads(client.get_pokemons(),
@@ -278,6 +283,9 @@ try:
                 v[agent][1] += path[1:]
 
         for agent in agents:
+            for p in pokemons:
+                if abs(agent.pos.x - p.pos.x) < 1 and abs(agent.pos.y - p.pos.y) < 1:
+                    print(p.id, "Pokemon Got!")
             if agent.id not in list(next_nodes.keys()):
                 # if the agent will not reach any pokemon faster than other agents
                 next_nodes[agent.id] = [agent.src]  # stay in place
@@ -287,10 +295,12 @@ try:
                 client.choose_next_edge(
                     '{"agent_id":' + str(agent.id) + ', "next_node_id":' + str(next_nodes[agent.id][0]) + '}')
 
-        client.move()
-        moves += 1
-
         ttl = client.time_to_end()
+
+        if previous_time == -1 or previous_time - float(ttl) >= 100:  # making sure we do 10 moves per second
+            previous_time = float(ttl)
+            client.move()
+            moves += 1
 
         msg = "Time left: " + str(int(int(ttl)/1000)) + " | Moves: " + str(moves)
         text = FONT.render(msg, True, Color(255, 255, 255))
